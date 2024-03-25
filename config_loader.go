@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"gopkg.in/yaml.v2"
 	"os"
 )
@@ -40,4 +41,26 @@ func parseConfig(filename string) (Config, error) {
 		return config, err
 	}
 	return config, nil
+}
+
+func configToString(config Config) string {
+	configStr := "GAS STATION CONFIGURATION\n" +
+		"=========================\n" +
+		"Cars:\n" +
+		fmt.Sprintf("  Count: %d\n", config.Cars.Count) +
+		fmt.Sprintf("  Arrival Time Min: %d\n", config.Cars.ArrivalTimeMin) +
+		fmt.Sprintf("  Arrival Time Max: %d\n", config.Cars.ArrivalTimeMax) +
+		"\n" +
+		"Stations:\n"
+	for fuelType, stationConfig := range config.Stations {
+		configStr += fmt.Sprintf("%s station has %d stations\n", fuelType, stationConfig.Count) +
+			fmt.Sprintf("  Serve Time Min: %d\n", stationConfig.ServeTimeMin) +
+			fmt.Sprintf("  Serve Time Max: %d\n", stationConfig.ServeTimeMax) + "\n"
+	}
+	configStr += "Registers:\n" +
+		fmt.Sprintf("  Count: %d\n", config.Registers.Count) +
+		fmt.Sprintf("  Handle Time Min: %d\n", config.Registers.HandleTimeMin) +
+		fmt.Sprintf("  Handle Time Max: %d\n", config.Registers.HandleTimeMax) +
+		"=========================\n"
+	return configStr
 }

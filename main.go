@@ -20,6 +20,8 @@ type gasStation struct {
 	stations  []*Station
 	registers []*Register
 	wg        sync.WaitGroup
+	fuelStats map[FuelType]*FuelStats
+	regStats  RegisterStats
 }
 
 type Car struct {
@@ -42,6 +44,18 @@ type Register struct {
 	maxHandle int
 	isBusy    bool
 	queue     chan *Car
+}
+
+type FuelStats struct {
+	TotalCars    int
+	TotalTime    time.Duration
+	MaxQueueTime time.Duration
+}
+
+type RegisterStats struct {
+	TotalCars    int
+	TotalTime    time.Duration
+	MaxQueueTime time.Duration
 }
 
 func getRandomFuelType() FuelType {
@@ -117,6 +131,13 @@ func initGasStation(config Config) *gasStation {
 	return &gasStation{
 		stations:  stations,
 		registers: registers,
+		fuelStats: map[FuelType]*FuelStats{
+			Gas:      &FuelStats{},
+			Diesel:   &FuelStats{},
+			LPG:      &FuelStats{},
+			Electric: &FuelStats{},
+		},
+		regStats: RegisterStats{},
 	}
 }
 
@@ -127,24 +148,22 @@ func spawnCars(gStation *gasStation, config Config) {
 			StationType: getRandomFuelType(),
 		}
 
-		fmt.Printf("Car %d arrived at station %s\n", car.ID, car.StationType)
-
 		gStation.wg.Add(1)
 		station := getStationWithShortestQueue(gStation.stations, car.StationType)
 		station.queue <- car
-
+		fmt.Printf("[%s] Car %d arrived at station queue type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
 		arrivalTime := rand.Intn(config.Cars.ArrivalTimeMax-config.Cars.ArrivalTimeMin) + config.Cars.ArrivalTimeMin
 		time.Sleep(time.Duration(arrivalTime) * time.Second)
-
 	}
 }
 
 func stationRoutine(station *Station, gs *gasStation) {
 	for car := range station.queue {
+		fmt.Printf("[%s] Car %d arrived at station type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
 		station.isBusy = true
 		serveTime := rand.Intn(station.maxServe-station.minServe) + station.minServe
 		time.Sleep(time.Duration(serveTime) * time.Second)
-		fmt.Printf("Car %d served at station %s\n", car.ID, car.StationType)
+		fmt.Printf("[%s] Car %d served at station type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
 
 		register := getRegisterWithShortestQueue(gs.registers)
 		register.queue <- car
@@ -154,10 +173,11 @@ func stationRoutine(station *Station, gs *gasStation) {
 
 func registerRoutine(register *Register, gs *gasStation) {
 	for car := range register.queue {
+		fmt.Printf("[%s] Car %d arrived at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
 		register.isBusy = true
 		handleTime := rand.Intn(register.maxHandle-register.minHandle) + register.minHandle
 		time.Sleep(time.Duration(handleTime) * time.Second)
-		fmt.Printf("Car %d handled at register\n", car.ID)
+		fmt.Printf("[%s] Car %d handled at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
 		gs.wg.Done()
 		register.isBusy = false
 	}
@@ -167,6 +187,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Println(configToString(config))
 
 	gs := initGasStation(config)
 
