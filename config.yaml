@@ -1,5 +1,5 @@
 cars:
-  count: 150
+  count: 1000
   arrival_time_min: 1
   arrival_time_max: 2
 stations:
