@@ -153,31 +153,50 @@ func spawnCars(gStation *gasStation, config Config) {
 		station.queue <- car
 		fmt.Printf("[%s] Car %d arrived at station queue type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
 		arrivalTime := rand.Intn(config.Cars.ArrivalTimeMax-config.Cars.ArrivalTimeMin) + config.Cars.ArrivalTimeMin
-		time.Sleep(time.Duration(arrivalTime) * time.Second)
+		time.Sleep(time.Duration(arrivalTime) * time.Millisecond)
 	}
 }
 
 func stationRoutine(station *Station, gs *gasStation) {
 	for car := range station.queue {
-		fmt.Printf("[%s] Car %d arrived at station type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
-		station.isBusy = true
-		serveTime := rand.Intn(station.maxServe-station.minServe) + station.minServe
-		time.Sleep(time.Duration(serveTime) * time.Second)
-		fmt.Printf("[%s] Car %d served at station type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
+		startTime := time.Now()
+		fmt.Printf("[%s] Car %d processing at station type %s number %d\n", startTime.Format("15:04:05"), car.ID, car.StationType, station.ID)
 
+		// Simulace obsluhy
+		serveTime := time.Duration(rand.Intn(station.maxServe-station.minServe)+station.minServe) * time.Millisecond
+		time.Sleep(serveTime)
+
+		elapsed := time.Since(startTime)
+		gs.fuelStats[car.StationType].TotalCars++
+		gs.fuelStats[car.StationType].TotalTime += elapsed
+		if elapsed > gs.fuelStats[car.StationType].MaxQueueTime {
+			gs.fuelStats[car.StationType].MaxQueueTime = elapsed
+		}
+
+		fmt.Printf("[%s] Car %d served at station type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
+		// Přesun do registru
 		register := getRegisterWithShortestQueue(gs.registers)
 		register.queue <- car
-		station.isBusy = false
 	}
 }
 
 func registerRoutine(register *Register, gs *gasStation) {
 	for car := range register.queue {
+		startTime := time.Now()
 		fmt.Printf("[%s] Car %d arrived at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
 		register.isBusy = true
+
 		handleTime := rand.Intn(register.maxHandle-register.minHandle) + register.minHandle
-		time.Sleep(time.Duration(handleTime) * time.Second)
+		time.Sleep(time.Duration(handleTime) * time.Millisecond)
 		fmt.Printf("[%s] Car %d handled at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
+
+		elapsed := time.Since(startTime)
+		gs.regStats.TotalCars++
+		gs.regStats.TotalTime += elapsed
+		if elapsed > gs.regStats.MaxQueueTime {
+			gs.regStats.MaxQueueTime = elapsed
+		}
+
 		gs.wg.Done()
 		register.isBusy = false
 	}
@@ -192,6 +211,12 @@ func main() {
 
 	gs := initGasStation(config)
 
+	gs.fuelStats = make(map[FuelType]*FuelStats)
+	for _, ft := range []FuelType{Gas, Diesel, LPG, Electric} {
+		gs.fuelStats[ft] = &FuelStats{}
+	}
+	gs.regStats = RegisterStats{}
+
 	for _, station := range gs.stations {
 		go stationRoutine(station, gs)
 	}
@@ -205,4 +230,25 @@ func main() {
 	gs.wg.Wait()
 
 	fmt.Println("Simulation finished")
+
+	printStats(gs)
+}
+
+func printStats(gs *gasStation) {
+	fmt.Println("\n====================")
+	fmt.Println("SIMULATION STATISTICS")
+	fmt.Println("====================\n")
+
+	for fuelType, stats := range gs.fuelStats {
+		if stats.TotalCars > 0 {
+			avgTime := stats.TotalTime / time.Duration(stats.TotalCars)
+			fmt.Printf("%s - Total Cars: %d, Total Time: %s, Avg Time: %s, Max Queue Time: %s\n", fuelType, stats.TotalCars, stats.TotalTime, avgTime, stats.MaxQueueTime)
+		}
+	}
+
+	fmt.Println("\nRegister Stats:")
+	if gs.regStats.TotalCars > 0 {
+		avgTime := gs.regStats.TotalTime / time.Duration(gs.regStats.TotalCars)
+		fmt.Printf("Total Cars: %d, Total Time: %s, Avg Time: %s, Max Queue Time: %s\n", gs.regStats.TotalCars, gs.regStats.TotalTime, avgTime, gs.regStats.MaxQueueTime)
+	}
 }
