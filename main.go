@@ -161,8 +161,10 @@ func spawnCars(gStation *gasStation, config Config) {
 		station := getStationWithShortestQueue(gStation.stations, car.StationType)
 		station.queue <- car
 		fmt.Printf("[%s] Car %d arrived at station queue type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
-		arrivalTime := rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())) + int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())
+		arrivalTime := rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1) + int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())
+		fmt.Printf("[%s] Car %d will arrive in %d ms\n", time.Now().Format("15:04:05"), car.ID, arrivalTime)
 		time.Sleep(time.Duration(arrivalTime) * time.Millisecond)
+
 	}
 }
 
@@ -172,7 +174,7 @@ func stationRoutine(station *Station, gs *gasStation) {
 		fmt.Printf("[%s] Car %d processing at station type %s number %d\n", startTime.Format("15:04:05"), car.ID, car.StationType, station.ID)
 
 		// Simulace obsluhy
-		serveTime := time.Duration(rand.Intn(station.maxServe-station.minServe)+station.minServe) * time.Millisecond
+		serveTime := time.Duration(rand.Intn(station.maxServe-station.minServe+1)+station.minServe) * time.Millisecond
 		time.Sleep(serveTime)
 
 		elapsed := time.Since(startTime)
@@ -195,7 +197,7 @@ func registerRoutine(register *Register, gs *gasStation) {
 		fmt.Printf("[%s] Car %d arrived at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
 		register.isBusy = true
 
-		handleTime := rand.Intn(register.maxHandle-register.minHandle) + register.minHandle
+		handleTime := rand.Intn(register.maxHandle-register.minHandle+1) + register.minHandle
 		time.Sleep(time.Duration(handleTime) * time.Millisecond)
 		fmt.Printf("[%s] Car %d handled at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
 
