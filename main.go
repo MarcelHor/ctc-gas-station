@@ -17,11 +17,13 @@ const (
 )
 
 type gasStation struct {
-	stations  []*Station
-	registers []*Register
-	wg        sync.WaitGroup
-	fuelStats map[FuelType]*FuelStats
-	regStats  RegisterStats
+	stations   []*Station
+	registers  []*Register
+	wg         sync.WaitGroup
+	stationWGs map[FuelType]*sync.WaitGroup
+	registerWG sync.WaitGroup
+	fuelStats  map[FuelType]*FuelStats
+	regStats   RegisterStats
 }
 
 type Car struct {
@@ -102,35 +104,42 @@ func getRegisterWithShortestQueue(registers []*Register) *Register {
 func initGasStation(config Config) *gasStation {
 	var stations []*Station
 	var registers []*Register
+	stationWGs := make(map[FuelType]*sync.WaitGroup)
 
 	for fuelType, sConf := range config.Stations {
+		stationWGs[fuelType] = &sync.WaitGroup{}
 		for i := 0; i < sConf.Count; i++ {
+			stationWGs[fuelType].Add(1)
 			station := &Station{
 				ID:          i,
 				StationType: fuelType,
 				minServe:    sConf.ServeTimeMin,
 				maxServe:    sConf.ServeTimeMax,
-				queue:       make(chan *Car, config.Cars.Count),
+				queue:       make(chan *Car, 20),
 				isBusy:      false,
 			}
 			stations = append(stations, station)
 		}
 	}
 
+	var registerWG sync.WaitGroup
 	for i := 0; i < config.Registers.Count; i++ {
+		registerWG.Add(1)
 		register := &Register{
 			ID:        i,
 			minHandle: config.Registers.HandleTimeMin,
 			maxHandle: config.Registers.HandleTimeMax,
-			queue:     make(chan *Car, config.Cars.Count),
+			queue:     make(chan *Car, 20),
 			isBusy:    false,
 		}
 		registers = append(registers, register)
 	}
 
 	return &gasStation{
-		stations:  stations,
-		registers: registers,
+		stations:   stations,
+		registers:  registers,
+		stationWGs: stationWGs,
+		registerWG: registerWG,
 		fuelStats: map[FuelType]*FuelStats{
 			Gas:      &FuelStats{},
 			Diesel:   &FuelStats{},
@@ -229,6 +238,14 @@ func main() {
 
 	gs.wg.Wait()
 
+	for _, station := range gs.stations {
+		close(station.queue)
+	}
+
+	for _, register := range gs.registers {
+		close(register.queue)
+	}
+
 	fmt.Println("Simulation finished")
 
 	printStats(gs)
@@ -237,7 +254,7 @@ func main() {
 func printStats(gs *gasStation) {
 	fmt.Println("\n====================")
 	fmt.Println("SIMULATION STATISTICS")
-	fmt.Println("====================\n")
+	fmt.Println("====================")
 
 	for fuelType, stats := range gs.fuelStats {
 		if stats.TotalCars > 0 {
