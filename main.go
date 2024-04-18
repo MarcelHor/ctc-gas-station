@@ -113,8 +113,8 @@ func initGasStation(config Config) *gasStation {
 			station := &Station{
 				ID:          i,
 				StationType: fuelType,
-				minServe:    sConf.ServeTimeMin,
-				maxServe:    sConf.ServeTimeMax,
+				minServe:    int(sConf.ServeTimeMin.Duration.Milliseconds()),
+				maxServe:    int(sConf.ServeTimeMax.Duration.Milliseconds()),
 				queue:       make(chan *Car, 20),
 				isBusy:      false,
 			}
@@ -127,8 +127,8 @@ func initGasStation(config Config) *gasStation {
 		registerWG.Add(1)
 		register := &Register{
 			ID:        i,
-			minHandle: config.Registers.HandleTimeMin,
-			maxHandle: config.Registers.HandleTimeMax,
+			minHandle: int(config.Registers.HandleTimeMin.Duration.Milliseconds()),
+			maxHandle: int(config.Registers.HandleTimeMax.Duration.Milliseconds()),
 			queue:     make(chan *Car, 20),
 			isBusy:    false,
 		}
@@ -161,7 +161,7 @@ func spawnCars(gStation *gasStation, config Config) {
 		station := getStationWithShortestQueue(gStation.stations, car.StationType)
 		station.queue <- car
 		fmt.Printf("[%s] Car %d arrived at station queue type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
-		arrivalTime := rand.Intn(config.Cars.ArrivalTimeMax-config.Cars.ArrivalTimeMin) + config.Cars.ArrivalTimeMin
+		arrivalTime := rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())) + int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())
 		time.Sleep(time.Duration(arrivalTime) * time.Millisecond)
 	}
 }

@@ -1,25 +1,25 @@
 cars:
-  count: 150000
-  arrival_time_min: 1
-  arrival_time_max: 2
+  count: 5
+  arrival_time_min: 1s
+  arrival_time_max: 2s
 stations:
   gas:
     count: 2
-    serve_time_min: 2
-    serve_time_max: 5
+    serve_time_min: 2s
+    serve_time_max: 5s
   diesel:
     count: 2
-    serve_time_min: 3
-    serve_time_max: 6
+    serve_time_min: 3s
+    serve_time_max: 6s
   lpg:
     count: 1
-    serve_time_min: 4
-    serve_time_max: 7
+    serve_time_min: 4s
+    serve_time_max: 7s
   electric:
     count: 1
-    serve_time_min: 5
-    serve_time_max: 10
+    serve_time_min: 5s
+    serve_time_max: 10s
 registers:
   count: 3
-  handle_time_min: 1
-  handle_time_max: 3
+  handle_time_min: 1s
+  handle_time_max: 3s
