@@ -16,25 +16,28 @@ const (
 	Electric FuelType = "electric"
 )
 
-type gasStation struct {
+type GasStation struct {
 	stations   []*Station
 	registers  []*Register
 	wg         sync.WaitGroup
 	stationWGs map[FuelType]*sync.WaitGroup
 	registerWG sync.WaitGroup
-	fuelStats  map[FuelType]*FuelStats
-	regStats   RegisterStats
+	allCars    []*Car
 }
 
 type Car struct {
 	ID                int
 	StationType       FuelType
 	ArrivalAtStation  time.Time
-	ArrivalAtReg      time.Time
-	ServiceQueueTime  time.Duration
+	ServiceStartTime  time.Time
+	ServiceEndTime    time.Time
 	ServiceTime       time.Duration
-	RegisterQueueTime time.Duration
+	ServiceQueueTime  time.Duration
+	ArrivalAtReg      time.Time
+	RegisterStartTime time.Time
+	RegisterEndTime   time.Time
 	RegisterTime      time.Duration
+	RegisterQueueTime time.Duration
 }
 
 type Station struct {
@@ -61,53 +64,13 @@ type FuelStats struct {
 }
 
 type RegisterStats struct {
-	TotalCars    int
-	TotalTime    time.Duration
-	MaxQueueTime time.Duration
+	TotalCars     int
+	TotalTime     time.Duration
+	MaxQueueTime  time.Duration
+	TotalRegister int
 }
 
-func getRandomFuelType() FuelType {
-	fuelTypes := []FuelType{Gas, Diesel, LPG, Electric}
-	return fuelTypes[rand.Intn(len(fuelTypes))]
-}
-
-func getStationWithShortestQueue(stations []*Station, carType FuelType) *Station {
-	var shortestQueue []*Station
-	for _, station := range stations {
-		if station.StationType == carType {
-			if len(shortestQueue) == 0 {
-				shortestQueue = append(shortestQueue, station)
-			} else if len(station.queue) < len(shortestQueue[0].queue) {
-				shortestQueue = []*Station{station}
-			} else if len(station.queue) == len(shortestQueue[0].queue) {
-				shortestQueue = append(shortestQueue, station)
-			}
-		}
-	}
-	if len(shortestQueue) == 1 {
-		return shortestQueue[0]
-	}
-	return shortestQueue[rand.Intn(len(shortestQueue))]
-}
-
-func getRegisterWithShortestQueue(registers []*Register) *Register {
-	var shortestQueue []*Register
-	for _, register := range registers {
-		if len(shortestQueue) == 0 {
-			shortestQueue = append(shortestQueue, register)
-		} else if len(register.queue) < len(shortestQueue[0].queue) {
-			shortestQueue = []*Register{register}
-		} else if len(register.queue) == len(shortestQueue[0].queue) {
-			shortestQueue = append(shortestQueue, register)
-		}
-	}
-	if len(shortestQueue) == 1 {
-		return shortestQueue[0]
-	}
-	return shortestQueue[rand.Intn(len(shortestQueue))]
-}
-
-func initGasStation(config Config) *gasStation {
+func initGasStation(config Config) *GasStation {
 	var stations []*Station
 	var registers []*Register
 	stationWGs := make(map[FuelType]*sync.WaitGroup)
@@ -141,22 +104,15 @@ func initGasStation(config Config) *gasStation {
 		registers = append(registers, register)
 	}
 
-	return &gasStation{
+	return &GasStation{
 		stations:   stations,
 		registers:  registers,
 		stationWGs: stationWGs,
 		registerWG: registerWG,
-		fuelStats: map[FuelType]*FuelStats{
-			Gas:      &FuelStats{},
-			Diesel:   &FuelStats{},
-			LPG:      &FuelStats{},
-			Electric: &FuelStats{},
-		},
-		regStats: RegisterStats{},
 	}
 }
 
-func spawnCars(gStation *gasStation, config Config) {
+func spawnCars(gStation *GasStation, config Config) {
 	for i := 0; i < config.Cars.Count; i++ {
 		car := &Car{
 			ID:               i,
@@ -164,55 +120,42 @@ func spawnCars(gStation *gasStation, config Config) {
 			ArrivalAtStation: time.Now(),
 		}
 
+		gStation.allCars = append(gStation.allCars, car)
 		gStation.wg.Add(1)
 		station := getStationWithShortestQueue(gStation.stations, car.StationType)
 		station.queue <- car
 		arrivalTime := rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1) + int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())
 		time.Sleep(time.Duration(arrivalTime) * time.Millisecond)
-
 	}
 }
 
-func stationRoutine(station *Station, gs *gasStation) {
+func stationRoutine(station *Station, gs *GasStation) {
 	for car := range station.queue {
-		startServiceTime := time.Now()
-		queueTime := startServiceTime.Sub(car.ArrivalAtStation) // Výpočet čekací doby
+		car.ServiceStartTime = time.Now()
 
-		// Simulace obsluhy
 		serveTime := time.Duration(rand.Intn(station.maxServe-station.minServe+1)+station.minServe) * time.Millisecond
+		car.ServiceTime = serveTime
 		time.Sleep(serveTime)
 
-		serviceDuration := time.Since(startServiceTime)
-		totalStationTime := queueTime + serviceDuration // Zahrnutí čekací doby do celkového času
-		gs.fuelStats[car.StationType].TotalCars++
-		gs.fuelStats[car.StationType].TotalTime += totalStationTime
-		if totalStationTime > gs.fuelStats[car.StationType].MaxQueueTime {
-			gs.fuelStats[car.StationType].MaxQueueTime = totalStationTime
-		}
+		car.ServiceEndTime = time.Now()
+		car.ServiceQueueTime = time.Since(car.ServiceStartTime) - serveTime
 
-		// Přesun do registru
 		register := getRegisterWithShortestQueue(gs.registers)
 		car.ArrivalAtReg = time.Now()
 		register.queue <- car
 	}
 }
 
-func registerRoutine(register *Register, gs *gasStation) {
+func registerRoutine(register *Register, gs *GasStation) {
 	for car := range register.queue {
-		startServiceTime := time.Now()
-		queueTime := startServiceTime.Sub(car.ArrivalAtReg)
+		car.RegisterStartTime = time.Now()
 
-		handleTime := rand.Intn(register.maxHandle-register.minHandle+1) + register.minHandle
-		time.Sleep(time.Duration(handleTime) * time.Millisecond)
+		handleTime := time.Duration(rand.Intn(register.maxHandle-register.minHandle+1)+register.minHandle) * time.Millisecond
+		car.RegisterTime = handleTime
+		time.Sleep(handleTime)
 
-		serviceDuration := time.Since(startServiceTime)
-		totalRegisterTime := queueTime + serviceDuration
-		gs.regStats.TotalCars++
-		gs.regStats.TotalTime += totalRegisterTime
-
-		if totalRegisterTime > gs.regStats.MaxQueueTime {
-			gs.regStats.MaxQueueTime = totalRegisterTime
-		}
+		car.RegisterEndTime = time.Now()
+		car.RegisterQueueTime = time.Since(car.RegisterStartTime) - handleTime
 
 		gs.wg.Done()
 		register.isBusy = false
@@ -228,12 +171,7 @@ func main() {
 	fmt.Println(configToString(config))
 
 	gs := initGasStation(config)
-
-	gs.fuelStats = make(map[FuelType]*FuelStats)
-	for _, ft := range []FuelType{Gas, Diesel, LPG, Electric} {
-		gs.fuelStats[ft] = &FuelStats{}
-	}
-	gs.regStats = RegisterStats{}
+	gs.allCars = []*Car{}
 
 	for _, station := range gs.stations {
 		go stationRoutine(station, gs)
@@ -256,23 +194,4 @@ func main() {
 	}
 
 	printStats(gs)
-}
-
-func printStats(gs *gasStation) {
-	fmt.Println("\n====================")
-	fmt.Println("SIMULATION STATISTICS")
-	fmt.Println("====================")
-
-	for fuelType, stats := range gs.fuelStats {
-		if stats.TotalCars > 0 {
-			avgTime := stats.TotalTime / time.Duration(stats.TotalCars)
-			fmt.Printf("%s - Total Cars: %d, Total Time: %s, Avg Time: %s, Max Queue Time: %s\n", fuelType, stats.TotalCars, stats.TotalTime, avgTime, stats.MaxQueueTime)
-		}
-	}
-
-	fmt.Println("\nRegister Stats:")
-	if gs.regStats.TotalCars > 0 {
-		avgTime := gs.regStats.TotalTime / time.Duration(gs.regStats.TotalCars)
-		fmt.Printf("Total Cars: %d, Total Time: %s, Avg Time: %s, Max Queue Time: %s\n", gs.regStats.TotalCars, gs.regStats.TotalTime, avgTime, gs.regStats.MaxQueueTime)
-	}
 }
