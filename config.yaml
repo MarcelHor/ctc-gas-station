@@ -1,5 +1,5 @@
 cars:
-  count: 100
+  count: 500
   arrival_time_min: 1ms
   arrival_time_max: 2ms
 stations:
@@ -20,6 +20,6 @@ stations:
     serve_time_min: 5ms
     serve_time_max: 10ms
 registers:
-  count: 3
+  count: 2
   handle_time_min: 1ms
   handle_time_max: 3ms

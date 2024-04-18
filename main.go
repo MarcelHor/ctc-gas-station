@@ -27,8 +27,14 @@ type gasStation struct {
 }
 
 type Car struct {
-	ID          int
-	StationType FuelType
+	ID                int
+	StationType       FuelType
+	ArrivalAtStation  time.Time
+	ArrivalAtReg      time.Time
+	ServiceQueueTime  time.Duration
+	ServiceTime       time.Duration
+	RegisterQueueTime time.Duration
+	RegisterTime      time.Duration
 }
 
 type Station struct {
@@ -153,16 +159,15 @@ func initGasStation(config Config) *gasStation {
 func spawnCars(gStation *gasStation, config Config) {
 	for i := 0; i < config.Cars.Count; i++ {
 		car := &Car{
-			ID:          i,
-			StationType: getRandomFuelType(),
+			ID:               i,
+			StationType:      getRandomFuelType(),
+			ArrivalAtStation: time.Now(),
 		}
 
 		gStation.wg.Add(1)
 		station := getStationWithShortestQueue(gStation.stations, car.StationType)
 		station.queue <- car
-		fmt.Printf("[%s] Car %d arrived at station queue type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
 		arrivalTime := rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1) + int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())
-		fmt.Printf("[%s] Car %d will arrive in %d ms\n", time.Now().Format("15:04:05"), car.ID, arrivalTime)
 		time.Sleep(time.Duration(arrivalTime) * time.Millisecond)
 
 	}
@@ -170,48 +175,50 @@ func spawnCars(gStation *gasStation, config Config) {
 
 func stationRoutine(station *Station, gs *gasStation) {
 	for car := range station.queue {
-		startTime := time.Now()
-		fmt.Printf("[%s] Car %d processing at station type %s number %d\n", startTime.Format("15:04:05"), car.ID, car.StationType, station.ID)
+		startServiceTime := time.Now()
+		queueTime := startServiceTime.Sub(car.ArrivalAtStation) // Výpočet čekací doby
 
 		// Simulace obsluhy
 		serveTime := time.Duration(rand.Intn(station.maxServe-station.minServe+1)+station.minServe) * time.Millisecond
 		time.Sleep(serveTime)
 
-		elapsed := time.Since(startTime)
+		serviceDuration := time.Since(startServiceTime)
+		totalStationTime := queueTime + serviceDuration // Zahrnutí čekací doby do celkového času
 		gs.fuelStats[car.StationType].TotalCars++
-		gs.fuelStats[car.StationType].TotalTime += elapsed
-		if elapsed > gs.fuelStats[car.StationType].MaxQueueTime {
-			gs.fuelStats[car.StationType].MaxQueueTime = elapsed
+		gs.fuelStats[car.StationType].TotalTime += totalStationTime
+		if totalStationTime > gs.fuelStats[car.StationType].MaxQueueTime {
+			gs.fuelStats[car.StationType].MaxQueueTime = totalStationTime
 		}
 
-		fmt.Printf("[%s] Car %d served at station type %s number %d\n", time.Now().Format("15:04:05"), car.ID, car.StationType, station.ID)
 		// Přesun do registru
 		register := getRegisterWithShortestQueue(gs.registers)
+		car.ArrivalAtReg = time.Now()
 		register.queue <- car
 	}
 }
 
 func registerRoutine(register *Register, gs *gasStation) {
 	for car := range register.queue {
-		startTime := time.Now()
-		fmt.Printf("[%s] Car %d arrived at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
-		register.isBusy = true
+		startServiceTime := time.Now()
+		queueTime := startServiceTime.Sub(car.ArrivalAtReg)
 
 		handleTime := rand.Intn(register.maxHandle-register.minHandle+1) + register.minHandle
 		time.Sleep(time.Duration(handleTime) * time.Millisecond)
-		fmt.Printf("[%s] Car %d handled at register number %d\n", time.Now().Format("15:04:05"), car.ID, register.ID)
 
-		elapsed := time.Since(startTime)
+		serviceDuration := time.Since(startServiceTime)
+		totalRegisterTime := queueTime + serviceDuration
 		gs.regStats.TotalCars++
-		gs.regStats.TotalTime += elapsed
-		if elapsed > gs.regStats.MaxQueueTime {
-			gs.regStats.MaxQueueTime = elapsed
+		gs.regStats.TotalTime += totalRegisterTime
+
+		if totalRegisterTime > gs.regStats.MaxQueueTime {
+			gs.regStats.MaxQueueTime = totalRegisterTime
 		}
 
 		gs.wg.Done()
 		register.isBusy = false
 	}
 }
+
 func main() {
 	config, err := parseConfig("config.yaml")
 	if err != nil {
@@ -247,8 +254,6 @@ func main() {
 	for _, register := range gs.registers {
 		close(register.queue)
 	}
-
-	fmt.Println("Simulation finished")
 
 	printStats(gs)
 }
