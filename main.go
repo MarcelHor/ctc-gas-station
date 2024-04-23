@@ -156,7 +156,7 @@ func registerRoutine(register *Register, gs *GasStation) {
 		if !gs.countQueueTimes {
 			fmt.Println("Car", car.ID, "served in", car.RegisterTime+car.ServiceTime, "at station", car.StationType)
 		} else {
-			fmt.Println("Car", car.ID, "served in", car.RegisterQueueTime+car.ServiceQueueTime+car.RegisterTime+car.ServiceTime, "at station", car.StationType)
+			fmt.Println("Car", car.ID, "served in", car.RegisterQueueTime+car.ServiceQueueTime+car.RegisterTime+car.ServiceTime, "fuel type: ", car.StationType)
 		}
 
 		gs.wg.Done()

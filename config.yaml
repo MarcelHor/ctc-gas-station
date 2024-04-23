@@ -9,8 +9,8 @@ stations:
     serve_time_max: 5ms
   diesel:
     count: 2
-    serve_time_min: 3ms
-    serve_time_max: 6ms
+    serve_time_min: 3s
+    serve_time_max: 6s
   lpg:
     count: 1
     serve_time_min: 4ms
