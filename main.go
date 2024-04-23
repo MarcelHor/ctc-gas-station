@@ -47,14 +47,12 @@ type Station struct {
 	minServe    int
 	maxServe    int
 	queue       chan *Car
-	isBusy      bool
 }
 
 type Register struct {
 	ID        int
 	minHandle int
 	maxHandle int
-	isBusy    bool
 	queue     chan *Car
 }
 
@@ -86,7 +84,6 @@ func initGasStation(config Config) *GasStation {
 				minServe:    int(sConf.ServeTimeMin.Duration.Milliseconds()),
 				maxServe:    int(sConf.ServeTimeMax.Duration.Milliseconds()),
 				queue:       make(chan *Car, 20),
-				isBusy:      false,
 			}
 			stations = append(stations, station)
 		}
@@ -100,7 +97,6 @@ func initGasStation(config Config) *GasStation {
 			minHandle: int(config.Registers.HandleTimeMin.Duration.Milliseconds()),
 			maxHandle: int(config.Registers.HandleTimeMax.Duration.Milliseconds()),
 			queue:     make(chan *Car, 20),
-			isBusy:    false,
 		}
 		registers = append(registers, register)
 	}
@@ -117,17 +113,15 @@ func initGasStation(config Config) *GasStation {
 func spawnCars(gStation *GasStation, config Config) {
 	for i := 0; i < config.Cars.Count; i++ {
 		gStation.wg.Add(1)
-		car := &Car{
-			ID:               i,
-			StationType:      getRandomFuelType(),
-			ArrivalAtStation: time.Now(),
-		}
-		gStation.allCars = append(gStation.allCars, car)
-		station := getStationWithShortestQueue(gStation.stations, car.StationType)
-		station.queue <- car
+		go func(carID int) {
+			car := &Car{ID: carID, StationType: getRandomFuelType(), ArrivalAtStation: time.Now()}
+			gStation.allCars = append(gStation.allCars, car)
+			station := getStationWithShortestQueue(gStation.stations, car.StationType)
+			station.queue <- car
 
-		arrivalTime := time.Duration(rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1)+int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())) * time.Millisecond
-		time.Sleep(arrivalTime)
+			arrivalTime := time.Duration(rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1)+int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())) * time.Millisecond
+			time.Sleep(arrivalTime)
+		}(i)
 	}
 }
 
@@ -166,7 +160,6 @@ func registerRoutine(register *Register, gs *GasStation) {
 		}
 
 		gs.wg.Done()
-		register.isBusy = false
 	}
 }
 
