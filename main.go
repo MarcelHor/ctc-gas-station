@@ -17,12 +17,13 @@ const (
 )
 
 type GasStation struct {
-	stations   []*Station
-	registers  []*Register
-	wg         sync.WaitGroup
-	stationWGs map[FuelType]*sync.WaitGroup
-	registerWG sync.WaitGroup
-	allCars    []*Car
+	stations        []*Station
+	registers       []*Register
+	wg              sync.WaitGroup
+	stationWGs      map[FuelType]*sync.WaitGroup
+	registerWG      sync.WaitGroup
+	allCars         []*Car
+	countQueueTimes bool
 }
 
 type Car struct {
@@ -105,27 +106,28 @@ func initGasStation(config Config) *GasStation {
 	}
 
 	return &GasStation{
-		stations:   stations,
-		registers:  registers,
-		stationWGs: stationWGs,
-		registerWG: registerWG,
+		stations:        stations,
+		registers:       registers,
+		stationWGs:      stationWGs,
+		registerWG:      registerWG,
+		countQueueTimes: false,
 	}
 }
 
 func spawnCars(gStation *GasStation, config Config) {
 	for i := 0; i < config.Cars.Count; i++ {
+		gStation.wg.Add(1)
 		car := &Car{
 			ID:               i,
 			StationType:      getRandomFuelType(),
 			ArrivalAtStation: time.Now(),
 		}
-
 		gStation.allCars = append(gStation.allCars, car)
-		gStation.wg.Add(1)
 		station := getStationWithShortestQueue(gStation.stations, car.StationType)
 		station.queue <- car
-		arrivalTime := rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1) + int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())
-		time.Sleep(time.Duration(arrivalTime) * time.Millisecond)
+
+		arrivalTime := time.Duration(rand.Intn(int(config.Cars.ArrivalTimeMax.Duration.Milliseconds())-int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())+1)+int(config.Cars.ArrivalTimeMin.Duration.Milliseconds())) * time.Millisecond
+		time.Sleep(arrivalTime)
 	}
 }
 
@@ -156,6 +158,12 @@ func registerRoutine(register *Register, gs *GasStation) {
 
 		car.RegisterEndTime = time.Now()
 		car.RegisterQueueTime = time.Since(car.RegisterStartTime) - handleTime
+
+		if !gs.countQueueTimes {
+			fmt.Println("Car", car.ID, "served in", car.RegisterTime+car.ServiceTime, "at station", car.StationType)
+		} else {
+			fmt.Println("Car", car.ID, "served in", car.RegisterQueueTime+car.ServiceQueueTime+car.RegisterTime+car.ServiceTime, "at station", car.StationType)
+		}
 
 		gs.wg.Done()
 		register.isBusy = false

@@ -14,7 +14,6 @@ func printStats(gs *GasStation) {
 	regStats := &RegisterStats{TotalCars: 0, TotalTime: 0, MaxQueueTime: 0}
 
 	for _, car := range gs.allCars {
-		fmt.Println(car)
 		fuelTypeStats, exists := statsByFuelType[car.StationType]
 		if !exists {
 			fuelTypeStats = &FuelStats{}
@@ -22,14 +21,24 @@ func printStats(gs *GasStation) {
 		}
 
 		fuelTypeStats.TotalCars++
-		serviceAndQueueTime := car.ServiceTime + car.ServiceQueueTime
+		var serviceAndQueueTime time.Duration
+		if gs.countQueueTimes {
+			serviceAndQueueTime = car.ServiceTime + car.ServiceQueueTime
+		} else {
+			serviceAndQueueTime = car.ServiceTime
+		}
 		fuelTypeStats.TotalTime += serviceAndQueueTime
 		if serviceAndQueueTime > fuelTypeStats.MaxQueueTime {
 			fuelTypeStats.MaxQueueTime = serviceAndQueueTime
 		}
 
 		regStats.TotalCars++
-		registerTime := car.RegisterTime + car.RegisterQueueTime
+		var registerTime time.Duration
+		if gs.countQueueTimes {
+			registerTime = car.RegisterTime + car.RegisterQueueTime
+		} else {
+			registerTime = car.RegisterTime
+		}
 		regStats.TotalTime += registerTime
 		if registerTime > regStats.MaxQueueTime {
 			regStats.MaxQueueTime = registerTime

@@ -20,6 +20,6 @@ stations:
     serve_time_min: 5ms
     serve_time_max: 10ms
 registers:
-  count: 2
+  count: 3
   handle_time_min: 1ms
   handle_time_max: 3ms
