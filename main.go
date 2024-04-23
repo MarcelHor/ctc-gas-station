@@ -110,12 +110,17 @@ func initGasStation(config Config) *GasStation {
 	}
 }
 
+// sakr v rare occasions race condition
+var mu sync.Mutex
+
 func spawnCars(gStation *GasStation, config Config) {
 	for i := 0; i < config.Cars.Count; i++ {
 		gStation.wg.Add(1)
 		go func(carID int) {
 			car := &Car{ID: carID, StationType: getRandomFuelType(), ArrivalAtStation: time.Now()}
+			mu.Lock()
 			gStation.allCars = append(gStation.allCars, car)
+			mu.Unlock()
 			station := getStationWithShortestQueue(gStation.stations, car.StationType)
 			station.queue <- car
 
